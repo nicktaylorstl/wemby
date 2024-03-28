@@ -33,11 +33,52 @@ def get_highlight_url(game_id, event_id):
     video_event = {'video': video_urls[0]['lurl'], 'desc': playlist[0]['dsc']}
     return (video_event['video'],video_event['desc'])
 
+
 @app.route('/')
 def index():
 
+    return render_template('index.html')
+
+@app.route('/3pt')
+def three_pt():
+
     data =[]
-    with open('data/wemby_blocks.csv', mode='r') as file:
+    with open('data/wemby_3pt.csv', mode='r') as file:
+        reader = csv.reader(file)
+        for row in reader:
+            data.append(row)
+
+    rando = random.randint(0,100)
+    id = data[rando]
+    video_info = [(id[0],id[1])]
+    
+
+    # Render the template with the query results
+    return render_template('3pt.html',video_info=video_info)
+
+@app.route('/assist')
+def assist():
+
+    data =[]
+    with open('data/wemby_assist.csv', mode='r') as file:
+        reader = csv.reader(file)
+        for row in reader:
+            data.append(row)
+
+    rando = random.randint(0,220)
+    id = data[rando]
+    video_info = [(id[0],id[1])]
+    
+
+    # Render the template with the query results
+    return render_template('assist.html',video_info=video_info)
+
+
+@app.route('/block')
+def block():
+
+    data =[]
+    with open('data/wemby_block.csv', mode='r') as file:
         reader = csv.reader(file)
         for row in reader:
             data.append(row)
@@ -48,7 +89,93 @@ def index():
     
 
     # Render the template with the query results
-    return render_template('wemby.html',video_info=video_info)
+    return render_template('block.html',video_info=video_info)
+
+@app.route('/dunk')
+def dunk():
+
+    data =[]
+    with open('data/wemby_dunk.csv', mode='r') as file:
+        reader = csv.reader(file)
+        for row in reader:
+            data.append(row)
+
+    rando = random.randint(0,140)
+    id = data[rando]
+    video_info = [(id[0],id[1])]
+    
+
+    # Render the template with the query results
+    return render_template('dunk.html',video_info=video_info)
+
+@app.route('/jumpball')
+def jumpball():
+
+    data =[]
+    with open('data/wemby_jumpball.csv', mode='r') as file:
+        reader = csv.reader(file)
+        for row in reader:
+            data.append(row)
+
+    rando = random.randint(0,75)
+    id = data[rando]
+    video_info = [(id[0],id[1])]
+    
+
+    # Render the template with the query results
+    return render_template('jumpball.html',video_info=video_info)
+
+@app.route('/layup')
+def layup():
+
+    data =[]
+    with open('data/wemby_layup.csv', mode='r') as file:
+        reader = csv.reader(file)
+        for row in reader:
+            data.append(row)
+
+    rando = random.randint(0,110)
+    id = data[rando]
+    video_info = [(id[0],id[1])]
+    
+
+    # Render the template with the query results
+    return render_template('layup.html',video_info=video_info)
+
+@app.route('/rebound')
+def rebound():
+
+    data =[]
+    with open('data/wemby_rebound.csv', mode='r') as file:
+        reader = csv.reader(file)
+        for row in reader:
+            data.append(row)
+
+    rando = random.randint(0,660)
+    id = data[rando]
+    video_info = [(id[0],id[1])]
+    
+
+    # Render the template with the query results
+    return render_template('rebound.html',video_info=video_info)
+
+@app.route('/steal')
+def steal():
+
+    data =[]
+    with open('data/wemby_steal.csv', mode='r') as file:
+        reader = csv.reader(file)
+        for row in reader:
+            data.append(row)
+
+    rando = random.randint(0,75)
+    id = data[rando]
+    video_info = [(id[0],id[1])]
+    
+
+    # Render the template with the query results
+    return render_template('steal.html',video_info=video_info)
+
 
 
 @app.route('/oops')
