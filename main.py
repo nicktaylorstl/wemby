@@ -190,6 +190,24 @@ def oops():
     # Render HTML template with video information
     return render_template('oops.html', video_info=video_info)
 
+@app.route('/block/bam')
+def bam_block():
+
+    data =[]
+    with open('data/bam_block.csv', mode='r') as file:
+        reader = csv.reader(file)
+        for row in reader:
+            data.append(row)
+
+    rando = random.randint(0,60)
+    id = data[rando]
+    video_info = [(id[0],id[1])]
+    
+
+    # Render the template with the query results
+    return render_template('bam_block.html',video_info=video_info)
+
+
 
 if __name__ == '__main__':
     app.run(debug=True, host= '0.0.0.0')
