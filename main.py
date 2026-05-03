@@ -1,6 +1,7 @@
 from flask import Flask, render_template, abort, request
 import requests
 import random
+import time
 from functools import lru_cache
 
 app = Flask(__name__, template_folder='templates')
@@ -47,10 +48,22 @@ LABELS = {
 }
 
 
-def nba_get(url):
-    r = requests.get(url, headers=NBA_HEADERS, timeout=15)
-    r.raise_for_status()
-    return r.json()
+_session = requests.Session()
+_session.headers.update(NBA_HEADERS)
+
+
+def nba_get(url, timeout=12, retries=2):
+    last_err = None
+    for attempt in range(retries + 1):
+        try:
+            r = _session.get(url, timeout=timeout)
+            r.raise_for_status()
+            return r.json()
+        except (requests.Timeout, requests.ConnectionError, requests.HTTPError) as e:
+            last_err = e
+            if attempt < retries:
+                time.sleep(1 + attempt)
+    raise last_err
 
 
 @lru_cache(maxsize=1)
