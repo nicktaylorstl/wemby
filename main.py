@@ -1,213 +1,155 @@
-from flask import Flask, render_template, request
-import sqlite3
-from datetime import datetime, timedelta
-import csv
+from flask import Flask, render_template, abort
 import requests
 import random
+from functools import lru_cache
+
+app = Flask(__name__, template_folder='templates')
+
+WEMBY_ID = 1641705
+SEASON = '2025-26'
+
+NBA_HEADERS = {
+    'Host': 'stats.nba.com',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:72.0) Gecko/20100101 Firefox/72.0',
+    'Accept': 'application/json, text/plain, */*',
+    'Accept-Language': 'en-US,en;q=0.5',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'x-nba-stats-origin': 'stats',
+    'x-nba-stats-token': 'true',
+    'Connection': 'keep-alive',
+    'Referer': 'https://stats.nba.com/',
+    'Pragma': 'no-cache',
+    'Cache-Control': 'no-cache',
+}
+
+# (EVENTMSGTYPE, keyword that must appear in description alongside "Wembanyama")
+# EVENTMSGTYPE: 1=made shot, 2=missed shot, 4=rebound, 5=turnover, 10=jump ball
+CATEGORIES = {
+    'dunk':     (1,  'Dunk'),
+    '3pt':      (1,  '3PT'),
+    'block':    (2,  'BLK'),
+    'layup':    (1,  'Layup'),
+    'rebound':  (4,  None),
+    'steal':    (5,  'Steal'),
+    'assist':   (1,  'AST'),
+    'jumpball': (10, None),
+}
+
+LABELS = {
+    'dunk':     'Dunk',
+    '3pt':      '3-Pointer',
+    'block':    'Block',
+    'layup':    'Layup',
+    'rebound':  'Rebound',
+    'steal':    'Steal',
+    'assist':   'Assist',
+    'jumpball': 'Jump Ball',
+}
 
 
-app = Flask(__name__,template_folder='templates')
+def nba_get(url):
+    r = requests.get(url, headers=NBA_HEADERS, timeout=15)
+    r.raise_for_status()
+    return r.json()
 
 
-def get_highlight_url(game_id, event_id):
-    headers = {
-        'Host': 'stats.nba.com',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:72.0) Gecko/20100101 Firefox/72.0',
-        'Accept': 'application/json, text/plain, */*',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'x-nba-stats-origin': 'stats',
-        'x-nba-stats-token': 'true',
-        'Connection': 'keep-alive',
-        'Referer': 'https://stats.nba.com/',
-        'Pragma': 'no-cache',
-        'Cache-Control': 'no-cache'
-    }
+@lru_cache(maxsize=1)
+def get_game_ids():
+    data = nba_get(
+        f'https://stats.nba.com/stats/playergamelog'
+        f'?PlayerID={WEMBY_ID}&Season={SEASON}&SeasonType=Regular+Season'
+    )
+    rows = data['resultSets'][0]['rowSet']
+    hdrs = data['resultSets'][0]['headers']
+    idx = hdrs.index('Game_ID')
+    return tuple(row[idx] for row in rows)
 
-    url = 'https://stats.nba.com/stats/videoeventsasset?GameEventID={}&GameID={}'.format(
-                event_id, game_id)
-    r = requests.get(url, headers=headers)
-    json = r.json()
-    video_urls = json['resultSets']['Meta']['videoUrls']
-    playlist = json['resultSets']['playlist']
-    video_event = {'video': video_urls[0]['lurl'], 'desc': playlist[0]['dsc']}
-    return (video_event['video'],video_event['desc'])
+
+@lru_cache(maxsize=300)
+def get_game_plays(game_id):
+    data = nba_get(
+        f'https://stats.nba.com/stats/playbyplayv2'
+        f'?GameID={game_id}&StartPeriod=0&EndPeriod=10'
+    )
+    rows = data['resultSets'][0]['rowSet']
+    hdrs = data['resultSets'][0]['headers']
+
+    ei  = hdrs.index('EVENTNUM')
+    eti = hdrs.index('EVENTMSGTYPE')
+    hdi = hdrs.index('HOMEDESCRIPTION')
+    vdi = hdrs.index('VISITORDESCRIPTION')
+
+    plays = []
+    for row in rows:
+        desc = (row[hdi] or '') + (row[vdi] or '')
+        plays.append((row[ei], row[eti], desc))
+    return tuple(plays)
+
+
+def get_video_url(game_id, event_id):
+    data = nba_get(
+        f'https://stats.nba.com/stats/videoeventsasset'
+        f'?GameEventID={event_id}&GameID={game_id}'
+    )
+    video_url = data['resultSets']['Meta']['videoUrls'][0]['lurl']
+    desc = data['resultSets']['playlist'][0]['dsc']
+    return video_url, desc
+
+
+def find_random_play(category):
+    event_type, keyword = CATEGORIES[category]
+    game_ids = list(get_game_ids())
+    random.shuffle(game_ids)
+
+    for game_id in game_ids[:25]:
+        try:
+            plays = get_game_plays(game_id)
+        except Exception:
+            continue
+        matching = [
+            (game_id, eid) for eid, etype, desc in plays
+            if etype == event_type
+            and 'Wembanyama' in desc
+            and (keyword is None or keyword in desc)
+        ]
+        if matching:
+            return random.choice(matching)
+
+    return None
 
 
 @app.route('/')
 def index():
-
-    return render_template('index.html')
-
-@app.route('/3pt')
-def three_pt():
-
-    data =[]
-    with open('data/wemby_3pt.csv', mode='r') as file:
-        reader = csv.reader(file)
-        for row in reader:
-            data.append(row)
-
-    rando = random.randint(0,100)
-    id = data[rando]
-    video_info = [(id[0],id[1])]
-    
-
-    # Render the template with the query results
-    return render_template('3pt.html',video_info=video_info)
-
-@app.route('/assist')
-def assist():
-
-    data =[]
-    with open('data/wemby_assist.csv', mode='r') as file:
-        reader = csv.reader(file)
-        for row in reader:
-            data.append(row)
-
-    rando = random.randint(0,220)
-    id = data[rando]
-    video_info = [(id[0],id[1])]
-    
-
-    # Render the template with the query results
-    return render_template('assist.html',video_info=video_info)
+    return render_template('index.html', categories=LABELS)
 
 
-@app.route('/block')
-def block():
+@app.route('/highlight/<category>')
+def highlight(category):
+    if category not in CATEGORIES:
+        abort(404)
 
-    data =[]
-    with open('data/wemby_block.csv', mode='r') as file:
-        reader = csv.reader(file)
-        for row in reader:
-            data.append(row)
+    label = LABELS[category]
 
-    rando = random.randint(0,200)
-    id = data[rando]
-    video_info = [(id[0],id[1])]
-    
+    try:
+        play = find_random_play(category)
+    except Exception as e:
+        return render_template('highlight.html', error=f'NBA API error: {e}',
+                               category=category, label=label)
 
-    # Render the template with the query results
-    return render_template('block.html',video_info=video_info)
+    if not play:
+        return render_template('highlight.html', error='No matching plays found.',
+                               category=category, label=label)
 
-@app.route('/dunk')
-def dunk():
+    game_id, event_id = play
+    try:
+        video_url, desc = get_video_url(game_id, event_id)
+    except Exception as e:
+        return render_template('highlight.html', error=f'Could not load video: {e}',
+                               category=category, label=label)
 
-    data =[]
-    with open('data/wemby_dunk.csv', mode='r') as file:
-        reader = csv.reader(file)
-        for row in reader:
-            data.append(row)
-
-    rando = random.randint(0,140)
-    id = data[rando]
-    video_info = [(id[0],id[1])]
-    
-
-    # Render the template with the query results
-    return render_template('dunk.html',video_info=video_info)
-
-@app.route('/jumpball')
-def jumpball():
-
-    data =[]
-    with open('data/wemby_jumpball.csv', mode='r') as file:
-        reader = csv.reader(file)
-        for row in reader:
-            data.append(row)
-
-    rando = random.randint(0,75)
-    id = data[rando]
-    video_info = [(id[0],id[1])]
-    
-
-    # Render the template with the query results
-    return render_template('jumpball.html',video_info=video_info)
-
-@app.route('/layup')
-def layup():
-
-    data =[]
-    with open('data/wemby_layup.csv', mode='r') as file:
-        reader = csv.reader(file)
-        for row in reader:
-            data.append(row)
-
-    rando = random.randint(0,110)
-    id = data[rando]
-    video_info = [(id[0],id[1])]
-    
-
-    # Render the template with the query results
-    return render_template('layup.html',video_info=video_info)
-
-@app.route('/rebound')
-def rebound():
-
-    data =[]
-    with open('data/wemby_rebound.csv', mode='r') as file:
-        reader = csv.reader(file)
-        for row in reader:
-            data.append(row)
-
-    rando = random.randint(0,660)
-    id = data[rando]
-    video_info = [(id[0],id[1])]
-    
-
-    # Render the template with the query results
-    return render_template('rebound.html',video_info=video_info)
-
-@app.route('/steal')
-def steal():
-
-    data =[]
-    with open('data/wemby_steal.csv', mode='r') as file:
-        reader = csv.reader(file)
-        for row in reader:
-            data.append(row)
-
-    rando = random.randint(0,75)
-    id = data[rando]
-    video_info = [(id[0],id[1])]
-    
-
-    # Render the template with the query results
-    return render_template('steal.html',video_info=video_info)
-
-
-
-@app.route('/oops')
-def oops():
-    # Read data from CSV file
-    video_info = []
-    with open('data/oops.csv', 'r') as csv_file:
-        csv_reader = csv.reader(csv_file)
-        for row in csv_reader:
-            video_info.append(row)
-
-    # Render HTML template with video information
-    return render_template('oops.html', video_info=video_info)
-
-@app.route('/block/bam')
-def bam_block():
-
-    data =[]
-    with open('data/bam_block.csv', mode='r') as file:
-        reader = csv.reader(file)
-        for row in reader:
-            data.append(row)
-
-    rando = random.randint(0,60)
-    id = data[rando]
-    video_info = [(id[0],id[1])]
-    
-
-    # Render the template with the query results
-    return render_template('bam_block.html',video_info=video_info)
-
+    return render_template('highlight.html', video_url=video_url, desc=desc,
+                           category=category, label=label)
 
 
 if __name__ == '__main__':
-    app.run(debug=True, host= '0.0.0.0')
+    app.run(debug=True, host='0.0.0.0')

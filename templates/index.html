@@ -10,15 +10,9 @@
     <h1>Wembanyama does it all!</h1>
     <h2>What would you like to see Wemby do?</h2>
     <ul>
-        <h2><a href="{{ url_for('block') }}">Block</a></h2>
-        <h2><a href="{{ url_for('dunk') }}">Dunk</a></h2>
-        <h2><a href="{{ url_for('three_pt') }}">Three</a></h2>
-        <h2><a href="{{ url_for('layup') }}">Layup</a></h2>
-        <h2><a href="{{ url_for('rebound') }}">Rebound</a></h2>
-        <h2><a href="{{ url_for('steal') }}">Steal</a></h2>
-        <h2><a href="{{ url_for('assist') }}">Assist</a></h2>
-        <h2><a href="{{ url_for('jumpball') }}">Jumpball</a></h2>
-        
+        {% for slug, label in categories.items() %}
+        <h2><a href="{{ url_for('highlight', category=slug) }}">{{ label }}</a></h2>
+        {% endfor %}
     </ul>
 </body>
 </html>
