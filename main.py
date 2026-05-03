@@ -1,4 +1,4 @@
-from flask import Flask, render_template, abort
+from flask import Flask, render_template, abort, request
 import requests
 import random
 from functools import lru_cache
@@ -6,7 +6,7 @@ from functools import lru_cache
 app = Flask(__name__, template_folder='templates')
 
 WEMBY_ID = 1641705
-SEASON = '2025-26'
+DEFAULT_SEASON = '2025-26'
 
 NBA_HEADERS = {
     'Host': 'stats.nba.com',
@@ -54,10 +54,33 @@ def nba_get(url):
 
 
 @lru_cache(maxsize=1)
-def get_game_ids():
+def get_seasons():
+    """All NBA seasons Wembanyama has played, newest first."""
+    try:
+        data = nba_get(
+            f'https://stats.nba.com/stats/playercareerstats'
+            f'?PlayerID={WEMBY_ID}&PerMode=PerGame'
+        )
+        rows = data['resultSets'][0]['rowSet']
+        hdrs = data['resultSets'][0]['headers']
+        idx = hdrs.index('SEASON_ID')
+        return tuple(sorted({row[idx] for row in rows}, reverse=True))
+    except Exception:
+        return (DEFAULT_SEASON,)
+
+
+@lru_cache(maxsize=20)
+def get_game_ids(season):
+    """Game IDs for a specific season, or all career if season='all'."""
+    if season == 'all':
+        ids = []
+        for s in get_seasons():
+            ids.extend(get_game_ids(s))
+        return tuple(ids)
+
     data = nba_get(
         f'https://stats.nba.com/stats/playergamelog'
-        f'?PlayerID={WEMBY_ID}&Season={SEASON}&SeasonType=Regular+Season'
+        f'?PlayerID={WEMBY_ID}&Season={season}&SeasonType=Regular+Season'
     )
     rows = data['resultSets'][0]['rowSet']
     hdrs = data['resultSets'][0]['headers']
@@ -96,9 +119,9 @@ def get_video_url(game_id, event_id):
     return video_url, desc
 
 
-def find_random_play(category):
+def find_random_play(category, season):
     event_type, keyword = CATEGORIES[category]
-    game_ids = list(get_game_ids())
+    game_ids = list(get_game_ids(season))
     random.shuffle(game_ids)
 
     for game_id in game_ids[:25]:
@@ -120,7 +143,8 @@ def find_random_play(category):
 
 @app.route('/')
 def index():
-    return render_template('index.html', categories=LABELS)
+    seasons = list(get_seasons())
+    return render_template('index.html', categories=LABELS, seasons=seasons)
 
 
 @app.route('/highlight/<category>')
@@ -128,27 +152,28 @@ def highlight(category):
     if category not in CATEGORIES:
         abort(404)
 
+    season = request.args.get('season', 'all')
     label = LABELS[category]
 
     try:
-        play = find_random_play(category)
+        play = find_random_play(category, season)
     except Exception as e:
         return render_template('highlight.html', error=f'NBA API error: {e}',
-                               category=category, label=label)
+                               category=category, label=label, season=season)
 
     if not play:
         return render_template('highlight.html', error='No matching plays found.',
-                               category=category, label=label)
+                               category=category, label=label, season=season)
 
     game_id, event_id = play
     try:
         video_url, desc = get_video_url(game_id, event_id)
     except Exception as e:
         return render_template('highlight.html', error=f'Could not load video: {e}',
-                               category=category, label=label)
+                               category=category, label=label, season=season)
 
     return render_template('highlight.html', video_url=video_url, desc=desc,
-                           category=category, label=label)
+                           category=category, label=label, season=season)
 
 
 if __name__ == '__main__':

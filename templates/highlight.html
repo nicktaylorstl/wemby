@@ -8,6 +8,7 @@
 </head>
 <body>
     <h1>Random Wembanyama {{ label }}</h1>
+    <p>Season: {{ season }}</p>
     {% if error %}
         <p>{{ error }}</p>
     {% else %}
@@ -22,7 +23,7 @@
         </div>
     {% endif %}
     <h3>
-        <a href="{{ url_for('highlight', category=category) }}">New {{ label }}</a>
+        <a href="{{ url_for('highlight', category=category, season=season) }}">New {{ label }}</a>
         --
         <a href="{{ url_for('index') }}">Home</a>
     </h3>

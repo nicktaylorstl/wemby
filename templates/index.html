@@ -8,11 +8,33 @@
 </head>
 <body>
     <h1>Wembanyama does it all!</h1>
+
+    <div>
+        <label for="season">Season:</label>
+        <select id="season">
+            <option value="all">All Career</option>
+            {% for s in seasons %}
+            <option value="{{ s }}">{{ s }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
     <h2>What would you like to see Wemby do?</h2>
     <ul>
         {% for slug, label in categories.items() %}
-        <h2><a href="{{ url_for('highlight', category=slug) }}">{{ label }}</a></h2>
+        <h2><a href="{{ url_for('highlight', category=slug) }}" class="cat-link" data-cat="{{ slug }}">{{ label }}</a></h2>
         {% endfor %}
     </ul>
+
+    <script>
+        const sel = document.getElementById('season');
+        function updateLinks() {
+            document.querySelectorAll('.cat-link').forEach(link => {
+                link.href = `/highlight/${link.dataset.cat}?season=${encodeURIComponent(sel.value)}`;
+            });
+        }
+        sel.addEventListener('change', updateLinks);
+        updateLinks();
+    </script>
 </body>
 </html>
